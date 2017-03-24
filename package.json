@@ -20,6 +20,7 @@
         "LLDB",
         "Native",
         "C++",
+        "KL",
         "Rust",
         "Disassembly"
     ],
@@ -132,7 +133,8 @@
                         "pascal",
                         "rust",
                         "lldb.disassembly",
-                        "swift"
+                        "swift",
+                        "kl"
                     ]
                 },
                 "variables": {
