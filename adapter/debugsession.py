@@ -6,6 +6,7 @@ import traceback
 import collections
 import tempfile
 import lldb
+import json
 from . import expressions
 from . import debugevents
 from . import disassembly
@@ -879,6 +880,10 @@ class DebugSession:
                     # `result` being an AsyncResponse means that the handler is asynchronous and
                     # will respond at a later time.
                     if result is AsyncResponse: return
+
+                    if result:
+                        res_str = json.dumps(result, ensure_ascii=False, encoding='latin1')
+                        result = json.loads(res_str)
                     self.send_response(response, result)
                 except Exception as e:
                     self.send_response(response, e)
