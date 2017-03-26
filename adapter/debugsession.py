@@ -880,10 +880,12 @@ class DebugSession:
                     # `result` being an AsyncResponse means that the handler is asynchronous and
                     # will respond at a later time.
                     if result is AsyncResponse: return
-
+                    
+                    # For some reason, we need to do this twice.
                     if result:
                         res_str = json.dumps(result, ensure_ascii=False, encoding='latin1')
                         result = json.loads(res_str)
+
                     self.send_response(response, result)
                 except Exception as e:
                     self.send_response(response, e)
@@ -1003,6 +1005,25 @@ class DebugSession:
                 else:
                     stop_reason_str = 'breakpoint'
             elif stop_reason == lldb.eStopReasonTrace or stop_reason == lldb.eStopReasonPlanComplete:
+                # In KL, we seem to be stopping randomly in parts of code that make no sense
+                # We can detect these moments by the callstack having an empty string at the top
+                # and avoid them by immediately stepping "out"
+                try:
+                    if thread.GetNumFrames() > 1:
+                        frame = thread.GetFrameAtIndex(0)
+                        # our test for validity is a bit crude - if this is a 'valid'
+                        # stop for the step, there would be a function name
+                        fn_name = frame.GetFunctionName()
+                        if fn_name == None:
+                            thread.StepOver()
+                            # re-init latest thread state
+                            thread = self.process.GetSelectedThread()
+                            frame = thread.GetFrameAtIndex(0)
+                            fn_name = frame.GetFunctionName()
+                        
+                except Exception as e:
+                    print("Exception occured in auto-step: " + repr(e))
+
                 stop_reason_str = 'step'
             else:
                 # Print stop details for these types
@@ -1059,13 +1080,29 @@ class DebugSession:
         self.send_event('output', { 'category': 'console', 'output': output })
 
     def map_path_to_local(self, path):
-        path = os.path.normpath(path)
+        path = os.path.realpath(path)
+        file_name = os.path.basename(path)
+
+        #print " ".join(traceback.format_stack(limit=10))
+        # JIT'ed files can result in 'Unknown' src files - ignore them
+        #print("file: " + file_name)
+        if file_name == "Unknown":
+            return path        
+
+        # if the path does not point at an actual file, 
+        # try searching for it under the paths given
+        if not os.path.exists(path):
+            for search_path in self.launch_args.get("sourceFolders", []):
+                for root, dirs, files in os.walk(search_path, topdown=True):
+                    if file_name in files:   
+                        return os.path.join(root, file_name)
+
         path_normcased = os.path.normcase(path)
         for remote_prefix, local_prefix in self.launch_args.get("sourceMap", {}).items():
             if path_normcased.startswith(os.path.normcase(remote_prefix)):
                 # This assumes that os.path.normcase does not change string length,
                 # but we want to preserve the original path casing...
-                return os.path.normpath(local_prefix + path[len(remote_prefix):])
+                path = os.path.normpath(local_prefix + path[len(remote_prefix):])
         return path
 
     def display_html(self, body):
