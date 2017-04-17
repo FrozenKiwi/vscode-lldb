@@ -881,7 +881,6 @@ class DebugSession:
                     # will respond at a later time.
                     if result is AsyncResponse: return
                     
-                    # For some reason, we need to do this twice.
                     if result:
                         res_str = json.dumps(result, ensure_ascii=False, encoding='latin1')
                         result = json.loads(res_str)
@@ -1077,6 +1076,8 @@ class DebugSession:
 
     # Write a message to debug console
     def console_msg(self, output):
+        if output:
+            output = output.decode("utf-8", errors="replace")
         self.send_event('output', { 'category': 'console', 'output': output })
 
     def map_path_to_local(self, path):
